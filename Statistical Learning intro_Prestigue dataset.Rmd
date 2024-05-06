@@ -1,0 +1,123 @@
+---
+title: "Bioinformatics in R: Statistical Learning very brief intro"
+author: "J. Cesar Ignacio Espinoza - Cesar   "
+date: "Week 07: April 29th and May 1st 2024"
+output: 
+  html_document: 
+    highlight: espresso
+    theme: cerulean
+---
+
+## Statistical Learning is Machine Learning
+
+After the lecture in class we will be running some simple linear models.
+
+```{r}
+#### First install the car package, this has a bunch of classic datasets used when learning ML.
+#install.packages("car")
+library(car)
+library(ggplot2)
+library(readr)
+```
+
+Fox, J. and Weisberg, S. (2019) An R Companion to Applied Regression, Third Edition, Sage.
+
+```{r}
+#### Look at the very elitist prestige package
+help("Prestige")
+# this is a built-in data set
+```
+
+### First Model 
+
+```{r}
+ggplot(Prestige, aes(x= education, y = prestige)) + geom_point()
+#plotting prestige data set
+```
+
+# prestige = b + m * education.
+
+```{r}
+#GOAL: predict a linear regression model (model presige as a function of education)
+reg1<-lm(prestige ~ education, data = Prestige)
+#lm function (linear model)
+summary(reg1)
+# gives us the intercept (B) and the slope (m); assocaited p-values 
+```
+HINT: You can get the weights of the model (coefficients) by doing this:
+```{r}
+#(above) for every year of eduaction, your prestige increases by 5.361 points
+#extracting coeficeints for linear regression
+B <- coef(reg1)[1]
+m <- coef(reg1)[2]
+ggplot(Prestige, aes(x= education, y = prestige)) + geom_point() + geom_abline(incercept = B, slope = m, color = 'salmon')
+
+```
+
+intercept <- coef(reg1)[1]
+slope <- coef(reg1)[2]
+You can add them to your ggplot with another geometry.
+
+```{r}
+# F-statistic: if we were to run the data different ways? would we get a better line of regression by chance?
+### Look at the example below, we are adding multiple predictors
+reg2<-lm(prestige~education+log(income)+women, data=Prestige)
+summary(reg2)
+# telling you: if you add all other covariants, prestige increases by the following metrics 
+```
+
+```{r}
+### We can add categorical data.
+# in python you will have to transform the type on your own (ex: severity --> 0/1; ICU 0/1; HERE you do not have to do that). R will split the column (add rows) for the categories 
+reg3<-lm(prestige~education+log(income)+type,data=Prestige)
+summary(reg3)
+```
+
+```{r}
+#reorder categorical data to have a "basal" category 
+Prestige$type <- with(Prestige, factor(type, levels = c("bc","wc","prof")))
+```
+
+# Now let's try with Genetic data, upload the dataset from canvas.
+
+
+```{r setup}
+    ### Edit this line so your notebook renders properly
+    knitr::opts_knit$set(root.dir = normalizePath("C:/Users/13035/OneDrive/Desktop/Bioinformatics_R/notebooks")) 
+```
+
+```{r}
+data <- read_csv("Cholesterol.csv")
+# 1 (major homozygous) 2 (heterozygous) 3 (homozygous minor allele)
+```
+
+Simple excercise, which snps are significantly associated with Cholesterol level in blood?
+
+```{r}
+### Plot the data
+#B <- coef(reg1)[1]
+#m <- coef(reg1)[2]
+#+ geom_abline(incercept = B, slope = m, color = 'salmon')
+
+# FOUR of these are assocaited with chol (hint)
+ggplot(data, aes(x= rs6669795, y = CHOL)) + geom_point() 
+ggplot(data, aes(x= rs7527051, y = CHOL)) + geom_point() 
+ggplot(data, aes(x= rs12140539, y = CHOL)) + geom_point() 
+ggplot(data, aes(x= rs2250402, y = CHOL)) + geom_point() 
+ggplot(data, aes(x= rs9509213, y = CHOL)) + geom_point() 
+ggplot(data, aes(x= rs12142199, y = CHOL)) + geom_point() 
+ggplot(data, aes(x= rs9782908, y = CHOL)) + geom_point() 
+
+```
+
+```{r}
+reg1<-lm(CHOL ~ rs6669795, data = data)
+#lm function (linear model)
+summary(reg1)
+# gives a p-value of 0.029 --> means 3% of data points are coming from random distribution by chance 
+reg2<-lm(CHOL ~ rs7527051, data = data)
+summary(reg2)
+significant 
+#adjust R-squared: 0.079 --> 8% of someones genotype is explained by this model (derived from this SNP)
+```
+
