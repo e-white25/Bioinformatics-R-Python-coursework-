@@ -5,5 +5,6 @@ A composition of all class note books covering the following topics:
 - ggplot
 - DESeq
 - WGCNA
+- RNA Seq Analysis 
     
   
