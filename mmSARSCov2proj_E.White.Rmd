@@ -1,0 +1,292 @@
+---
+title: "mmSARSproj"
+author: "Emily White"
+date: "2024-04-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = normalizePath("C:/Users/13035/OneDrive/Desktop/Bioinformatics_R/SARSproj"))
+```
+
+```{r}
+#if (!require("BiocManager", quietly = TRUE))
+#install.packages("BiocManager")
+#BiocManager::install("DESeq2")
+```
+
+```{r}
+#BiocManager::install("GenomeInfoDbData")
+library(dplyr)
+library(readr)
+library(DESeq2)
+library(ggplot2)
+```
+
+
+```{r}
+counts <- read.csv('mmSARScounts.csv', row.names = 1, header = TRUE)
+metadata <- read.csv('mmSARSmeta.csv', row.names = 1, header = TRUE)
+```
+
+# Dplyr: preprocessing RNA seq data
+- selecting columns only with counts data & transposing/renaming to match sample ID with columns in counts table
+- it is critical that columns of  count matrix & rows of column data (metadata table) are in the same order.
+```{r}
+cnts <- counts %>% 
+  dplyr::select(-Chr, -Start, -End, -Strand, -Length) %>%
+  dplyr::rename(Young_PBS = SRR24206826, Young_SARS_CoV2 = SRR24206824, MidAge_PBS =SRR24206827, MidAge_SARS_CoV2 =SRR24206825)
+#View(cnts)
+```
+
+# Differential Expression analysis of RNA-Seq data: DESeq
+- create a DESeqDataSet object from count data and sample metadata
+- defines the relationship between the gene expression levels and the experimental variables (e.g., treatment conditions) ~ Treatment indicates a simple design with one experimental variable named "Treatment"
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = cnts, 
+                              colData = metadata, #sample information
+                              design = ~ Treatment) #dependent variable 
+```
+DESeq: Statistical Testing
+- assess the statistical significance of differences in gene expression between conditions
+```{r}
+#setting a reference/control
+relevel(dds$Treatment, ref = 'PBS')
+```
+DESeq: Normalization + Correction
+- normalization of raw count data to account for differences in seq. depth and library size between samples
+- ensures that the expression levels of genes are comparable across samples
+- removing data w/row sums below 10
+```{r}
+filtered_cnts <- dds[rowSums(counts(dds))>10]
+filtered_cnts
+## goes to 14,376 rows from 55,487
+#### removes 41,111
+```
+DESeq: estimate gene disperson with counts across genome & data sets
+```{r}
+cnts_dds <- DESeq(filtered_cnts)
+counts(cnts_dds, normalized=T)
+```
+
+DESeq: Results
+- DESeqDataSet object: contains fold changes, p-values, adjusted p-values
+- alpha specifies the significance threshold for determining differentially expressed genes
+```{r}
+res <- results(cnts_dds, alpha = 0.05)
+res
+summary(res)
+```
+
+Sorting Results:
+-  reorder the results of differential expression analysis (res) based on p-values, in ascending order
+```{r}
+resOrdered <- res[order(res$pvalue),]
+resOrdered
+```
+- How many genes are differentially expressed at a significant level
+```{r}
+sum(res$padj < 0.05, na.rm = TRUE)
+#RESULT: 167
+```
+# Gene Annotation 
+```{r}
+#BiocManager::install("org.Mm.eg.db"
+library("stats4")
+library("BiocGenerics")
+library("AnnotationDbi")
+library("org.Mm.eg.db")
+sigs.df <-  as.data.frame(res)
+#converting object into a df; needed to make plots (volcano)
+sigs.df$symbol <- mapIds(org.Mm.eg.db, keys= rownames(sigs.df), keytype = 'ENSEMBL', colum = "SYMBOL")
+# converting ensembl ID in sig.df to gene names
+sigs.df 
+```
+
+```{r}
+
+
+```{r}
+#Collect all DE genes and write the results to file
+sigGenes <- res[ which(res$padj < 0.05), ]
+sigGenes
+write.csv(sigGenes, "Differentially_Expressed.csv", row.names = TRUE)
+```
+
+# Hierarchical clustering
+- uses distances and correlations to group genes together
+pheatmap: just for fun
+ - the rows (genes) are clustered based on their expression patterns across samples. This  *could* help identify groups of genes with similar expression profiles,if I could filter it better 
+```{r}
+#install.packages("pheatmap", dep=T)
+library("pheatmap")
+
+cdata <- colData(filtered_cnts)
+ntd <- normTransform(filtered_cnts)
+
+#UNSUCCESSFUL FILTERING BY P-VLAUE:
+#significant_rows <- rownames(res)[which(res$pvalue < 0.05)]
+#counts_subset <- counts(filtered_cnts)[significant_rows,]
+#ntd_subset <- log2(counts_subset / (sizeFactors(filtered_cnts)[rep(rownames(filtered_cnts), each = ncol(filtered_cnts))] + 1))
+
+pheatmap(assay(ntd),
+    cluster_rows = TRUE,
+    show_rownames = FALSE,
+    cluster_cols = FALSE,
+    annotation_col = as.data.frame(cdata[,"Treatment"], row.names=rownames(cdata)))
+```
+# Volcano Plot
+```{r}
+
+library(EnhancedVolcano)
+EnhancedVolcano(sigs.df,
+lab = sigs.df$symbol,
+x = 'log2FoldChange',
+y = 'padj',
+axisLabSize = 10,
+title = "Significantly Expressed Genes in the SARS-CoV2 mm10",
+subtitle = bquote(italic("Transcriptomic profiling of SARSCov2 infected lung endothelium")),
+titleLabSize = 13,
+subtitleLabSize = 11,
+captionLabSize = 9,
+caption = paste0("total = ", nrow(sigs.df), " transcripts"),
+pCutoff = 0.08,
+FCcutoff = 1.0,
+cutoffLineWidth = 0.5,
+pointSize = 1.5,
+labSize = 4.0,
+colAlpha = 4/5,
+max.overlaps = 30,
+gridlines.minor = FALSE,
+legendPosition = "bottom",
+legendLabSize = 10,
+legendIconSize = 3,
+ borderWidth = 0.8,
+drawConnectors = FALSE,)
+```
+
+# Heatmap: Identifying significantly expressed genes
+(The first heat map I manually adjusted for P-value; the second I used dyplr just to see the difference)
+*The take away: with manual adjustent; could see the top three downregulated genes in treatment vs. control*
+```{r}
+library(ComplexHeatmap)
+diff.df <- as.data.frame(sigs.df) 
+diff.df <- diff.df %>% 
+  na.omit(diff.df$symbol) %>%
+  filter(padj < 0.000000005) #subsetting diff.df data to be filtered for p values < 0.05
+
+mat <- counts(cnts_dds, normalized = TRUE)[rownames(diff.df),]
+mat.z <- t(apply(mat,1, scale))# centering the counts columns
+colnames(mat.z) <- colnames(mat)
+Heatmap(mat.z, cluster_rows= T, cluster_columns= T, 
+        name = "Z-score", 
+        row_names_gp = gpar(fontsize = 6),
+        column_names_gp = gpar(fontsize = 7),
+    column_names_rot = 45,
+        row_labels = diff.df[rownames(mat.z),]$symbol)
+```
+
+
+```{r}
+# using dypler to subset table of significance instead of manually setting p-value super lo
+# tried to omit.NA without success
+
+diff.df <- as.data.frame(sigs.df)
+diff.df <- diff.df %>%
+    na.omit(diff.df$symbol) %>%
+  filter(padj < 0.05, log2FoldChange > 3.5, baseMean > 100)
+
+mat <- counts(cnts_dds, normalized = T)[rownames(diff.df),]
+mat.z <- t(apply(mat, 1, scale))
+colnames(mat.z) <- colnames(mat)
+Heatmap(mat.z, cluster_rows= T, cluster_columns= T,
+        row_names_gp = gpar(fontsize = 6),
+        column_names_gp = gpar(fontsize = 7),
+    column_names_rot = 45,
+        name = "Z-score", row_labels = diff.df[rownames(mat.z),]$symbol)
+```
+# Gene Enrichment Analysis
+1. Upregulated Genes
+```{r}
+library(clusterProfiler)
+```
+```{r}
+# Prepping data for GO and GSEA
+diff.df <- as.data.frame(sigs.df)
+diff.df <- diff.df %>%
+  filter(padj < 0.05)
+#replacing ENS tag with gene names
+genes_to_test <- rownames(diff.df)
+GO_results <- enrichGO(gene = genes_to_test, OrgDb = "org.Mm.eg.db", keyType = 'ENSEMBL', ont = "BP")
+fit <- plot(barplot(GO_results, showCategory=10))
+GO_results
+```
+2. Downregulated Genes
+```{r}
+#lets compare with ghost
+library(gprofiler2) 
+go_upreg <- gost(genes_to_test, organism = 'mmusculus', significant = T)
+gostplot(go_upreg, interactive = T)
+```
+```{r}
+go_dwreg <- gost(genes_to_test, organism = 'mmusculus', significant = TRUE, ordered_query = TRUE)
+gostplot(go_dwreg, interactive = TRUE)
+```
+
+## Gene Set Enrichment Analysis 	
+Comparing different bioloical pathways to see if there are certain gene clusters (pathways) that fit best with our expression data
+Documentation: https://www.gsea-msigdb.org/gsea/msigdb/mouse/geneset
+```{r}
+library(fgsea)
+```
+- replacing ENS tag with gene names
+sort gene list:
+- create a matrix in descending order based on the values in the 'stat' column and extract these values into the gene_list vector 
+```{r}
+res <- res[order(-res$stat),]
+genes_to_test<- res$stat
+names(genes_to_test) <- rownames(res)
+```
+
+GOBP_INFLAMMATORY_CELL_APOPTOTIC_PROCESS
+```{r}
+gse <- gseGO(genes_to_test, ont = "BP", keyType = "ENSEMBL", OrgDb ="org.Mm.eg.db", eps = 1e-300 )
+gseaplot(gse, geneSetID = "GO:0006925", organism = "mouse")
+```
+
+GOCC_T_CELL_RECEPTOR_COMPLEX
+```{r}
+gse <- gseGO(genes_to_test, ont = "CC", keyType = "ENSEMBL", OrgDb ="org.Mm.eg.db", eps = 1e-300 )
+gseaplot(gse, geneSetID = "GO:0042101", organism = "mouse")
+```
+
+GOMF_CYTOKINE_ACTIVITY
+```{r}
+gse <- gseGO(genes_to_test, ont = "MF", keyType = "ENSEMBL", OrgDb ="org.Mm.eg.db", eps = 1e-300 )
+gseaplot(gse, geneSetID = "GO:0005125", organism = "mouse")
+```
+
+GOMF_CYTOKINE_RECEPTOR_ACTIVITY
+```{r}
+gse <- gseGO(genes_to_test, ont = "MF", keyType = "ENSEMBL", OrgDb ="org.Mm.eg.db", eps = 1e-300 )
+gseaplot(gse, geneSetID = "GO:0004896", organism = "mouse")
+```
+
+GOMF_CYTOKINE_BINDING
+```{r}
+gse <- gseGO(genes_to_test, ont = "MF", keyType = "ENSEMBL", OrgDb ="org.Mm.eg.db", eps = 1e-300 )
+gseaplot(gse, geneSetID = "GO:0019955", organism = "mouse")
+```
+
+GOBP_CYTOKINE_PRODUCTION_INVOLVED_IN_INFLAMMATORY_RESPONSE
+```{r}
+gse <- gseGO(genes_to_test, ont = "BP", keyType = "ENSEMBL", OrgDb ="org.Mm.eg.db", eps = 1e-300 )
+gseaplot(gse, geneSetID = "GO:0002534", organism = "mouse")
+```
+
+GOMF_LYSOZYME_ACTIVITY
+```{r}
+gse <- gseGO(genes_to_test, ont = "MF", keyType = "ENSEMBL", OrgDb ="org.Mm.eg.db", eps = 1e-300 )
+gseaplot(gse, geneSetID = "GO:0003796", organism = "mouse")
+```
