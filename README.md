@@ -1,4 +1,4 @@
-# Gene5130
+# Coursework: Bioinformatics in R
 Class Notebooks
 A composition of all class note books covering the following topics:
 - dplyr
