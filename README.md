@@ -1,4 +1,4 @@
-# Coursework: Bioinformatics in R
+# Coursework: RNA seq analysis + bioinformatics in python
 Class Notebooks
 A composition of all class note books covering the following topics:
 - dplyr
