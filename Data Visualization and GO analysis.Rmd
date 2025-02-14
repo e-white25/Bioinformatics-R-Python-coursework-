@@ -1,5 +1,5 @@
 ---
-title: "Bioinformatics in R. Lab 2: Data Visualization and GO analysis"
+title: "Bioinformatics in R. Lab 2: Data Visualization and GO analysis Tutorial"
 author: "J. Cesar Ignacio Espinoza - Cesar   "
 date: "Week 03: April 1st and 3rd 2024"
 output: 
@@ -88,7 +88,7 @@ EnhancedVolcano(sigs.df, x='log2FoldChange', y = 'padj', lab = sigs.df$symbol)
 
 ```
 Look at the manual (vignette for enhanced volcano) https://bioconductor.org/packages/devel/bioc/vignettes/EnhancedVolcano/inst/doc/EnhancedVolcano.html
-Create a new code chunk and plot a better version of this volcano plot! (15 minutes)
+Create a new code chunk and plot a better version of this volcano plot! 
 
 ```{r}
 sigs.df$symbol <- mapIds(org.Hs.eg.db, keys= rownames(sigs.df), keytype = 'ENSEMBL', colum = "SYMBOL")
